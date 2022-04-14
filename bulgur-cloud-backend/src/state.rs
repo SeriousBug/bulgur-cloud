@@ -9,6 +9,7 @@ use simple_secrecy::{self, Display};
 
 #[cfg(feature = "generate_types")]
 use typescript_type_def::TypeDef;
+use utoipa::Component;
 
 #[derive(
     Serialize,
@@ -22,6 +23,8 @@ use typescript_type_def::TypeDef;
     simple_secrecy::Display,
 )]
 #[cfg_attr(feature = "generate_types", derive(TypeDef))]
+#[derive(Component)]
+#[component(example = "IEFbt3Nn7szVn9POmzfft")]
 pub struct Token(String);
 
 impl Token {
@@ -63,7 +66,6 @@ impl PathTokenCache {
     }
 }
 
-
 pub struct AppState {
     pub started_at: chrono::DateTime<chrono::Local>,
     /// Maps tokens to usernames
@@ -91,7 +93,6 @@ impl fmt::Debug for AppState {
             .finish()
     }
 }
-
 
 #[derive(Clone, simple_secrecy::Debug, simple_secrecy::Display)]
 pub enum Authorized {

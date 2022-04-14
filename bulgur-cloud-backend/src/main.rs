@@ -1,5 +1,5 @@
 use bulgur_cloud::{
-    auth::{create_nobody, login, TOKEN_VALID_SECS},
+    auth::{create_nobody, login, ApiDoc, TOKEN_VALID_SECS},
     auth_middleware,
     cli::{cli_command, Opt},
     folder,
@@ -7,6 +7,8 @@ use bulgur_cloud::{
     state::{AppState, PathTokenCache, TokenCache},
     storage::{delete_storage, get_storage, head_storage, post_storage, put_storage},
 };
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use std::path::PathBuf;
 
@@ -131,6 +133,10 @@ async fn main() -> anyhow::Result<()> {
                     .service(api_scope)
                     .service(storage_scope)
                     .service(is_bulgur_cloud)
+                    .service(
+                        SwaggerUi::new("/swagger-ui/{_:.*}")
+                            .url("/api-doc/openapi.json", ApiDoc::openapi()),
+                    )
             })
             .bind("0.0.0.0:8000")?
             .run()

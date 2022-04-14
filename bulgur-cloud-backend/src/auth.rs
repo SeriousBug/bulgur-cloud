@@ -19,6 +19,7 @@ use typescript_type_def::TypeDef;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tracing::instrument;
+use utoipa::{openapi, Component, OpenApi};
 
 #[derive(Serialize, Deserialize)]
 /// The user data stored in files
@@ -133,8 +134,9 @@ pub(crate) async fn verify_pass(username: &str, password_input: &Password) -> Re
     web::block(move || -> anyhow::Result<()> {
         let password_in_file = PasswordHash::new(&user.password_hash)?;
         Ok(Scrypt.verify_password(password_input_clone.as_bytes(), &password_in_file)?)
-    }).await??;
-    
+    })
+    .await??;
+
     Ok(())
 }
 
@@ -174,21 +176,25 @@ impl FromStr for UserType {
     Clone,
     simple_secrecy::Debug,
     simple_secrecy::Display,
+    Component,
 )]
+#[component(example = "correct-horse-battery-staple")]
 pub struct Password(String);
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Component)]
 pub struct Login {
+    #[component(example = "john.doe")]
     username: String,
     password: Password,
 }
 
 pub const TOKEN_VALID_SECS: u64 = 60 * 60 * 24;
 
-#[derive(Serialize)]
+#[derive(Serialize, Component)]
 #[cfg_attr(feature = "generate_types", derive(TypeDef))]
 pub struct LoginResponse {
     token: Token,
+    #[component(example = "86400")]
     valid_for_seconds: u64,
 }
 
@@ -216,6 +222,16 @@ impl actix_web::error::ResponseError for LoginFailed {
     }
 }
 
+/// Log in to the service to get a token.
+#[utoipa::path(
+    // TODO: how to do this cleaner without having to override the path?
+    path="/auth/login",
+    request_body = Login,
+    responses(
+        (status = 200, description = "The token, and the maximum time it will be valid for. Tokens may expire sooner than this time.", body = [LoginResponse]),
+        (status = 400, description = "Login failed, the username or password was invalid.")
+    ),
+)]
 #[post("/login")]
 #[instrument(skip(data, state))]
 pub async fn login(
@@ -236,3 +252,7 @@ pub async fn login(
     }
     Err(LoginFailed)
 }
+
+#[derive(OpenApi)]
+#[openapi(handlers(login), components(Login, LoginResponse, Token, Password))]
+pub struct ApiDoc;
