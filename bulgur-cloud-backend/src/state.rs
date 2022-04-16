@@ -5,7 +5,7 @@ use nanoid::nanoid;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use simple_secrecy::{self, Display};
+use simple_secrecy;
 
 #[cfg(feature = "generate_types")]
 use typescript_type_def::TypeDef;

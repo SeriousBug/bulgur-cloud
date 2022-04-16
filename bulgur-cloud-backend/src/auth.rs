@@ -19,7 +19,7 @@ use typescript_type_def::TypeDef;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tracing::instrument;
-use utoipa::{openapi, Component, OpenApi};
+use utoipa::{Component, OpenApi};
 
 #[derive(Serialize, Deserialize)]
 /// The user data stored in files
@@ -224,11 +224,10 @@ impl actix_web::error::ResponseError for LoginFailed {
 
 /// Log in to the service to get a token.
 #[utoipa::path(
-    // TODO: how to do this cleaner without having to override the path?
-    path="/auth/login",
+    path = "/auth/login",
     request_body = Login,
     responses(
-        (status = 200, description = "The token, and the maximum time it will be valid for. Tokens may expire sooner than this time.", body = [LoginResponse]),
+        (status = 200, description = "The token, and the maximum time it will be valid for. Tokens may expire sooner than this time.", body = LoginResponse),
         (status = 400, description = "Login failed, the username or password was invalid.")
     ),
 )]

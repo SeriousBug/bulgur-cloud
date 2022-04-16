@@ -1,4 +1,7 @@
-use std::{ops::Deref, path::{PathBuf, Path}};
+use std::{
+    ops::Deref,
+    path::{Path, PathBuf},
+};
 
 use actix_files::NamedFile;
 use actix_multipart::{Multipart, MultipartError};
@@ -66,7 +69,6 @@ impl actix_web::error::ResponseError for StorageError {
 pub fn get_authorized_path(
     authorized: &Option<ReqData<Authorized>>,
     store: &str,
-    
 ) -> Result<PathBuf, StorageError> {
     match authorized {
         Some(authorized) => {
@@ -86,7 +88,7 @@ pub fn get_authorized_path(
         None => {
             tracing::debug!("No auth token attached");
             Err(StorageError::NotAuthorized)
-        },
+        }
     }
 }
 
@@ -104,7 +106,12 @@ pub struct FolderEntry {
     pub size: u64,
 }
 
-#[tracing::instrument]
+#[utoipa::path(
+    responses(
+        (status = 200, description = "If the path is a file, the API will return the file.", body = [NamedFile]),
+        (status = 404, description = "The file or folder at this path does not exist.")
+    ),
+)]
 #[get("/{store}/{path:.*}")]
 async fn get_storage(
     params: web::Path<(String, String)>,
@@ -263,16 +270,14 @@ async fn post_storage(
     let mut store_path = get_authorized_path(&authorized, store)?;
     store_path.push(path);
     match action.deref() {
-        StorageAction::MakePathToken => {
-            Ok(make_path_token(&state, &store_path).await)
-        },
+        StorageAction::MakePathToken => Ok(make_path_token(&state, &store_path).await),
         StorageAction::Move { new_path } => {
             let (to_store, to_path) = parse_store_path(new_path).ok_or(StorageError::BadPath)?;
             let mut to_store_path = get_authorized_path(&authorized, to_store)?;
             to_store_path.push(to_path);
             fs::rename(store_path, to_store_path).await?;
             Ok(empty_ok_response())
-        },
+        }
         StorageAction::CreateFolder => {
             tokio::fs::create_dir(&store_path).await?;
             Ok(empty_ok_response())

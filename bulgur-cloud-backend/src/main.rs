@@ -1,10 +1,10 @@
 use bulgur_cloud::{
-    auth::{create_nobody, login, ApiDoc, TOKEN_VALID_SECS},
+    auth::{create_nobody, Login, LoginResponse, Password, TOKEN_VALID_SECS},
     auth_middleware,
     cli::{cli_command, Opt},
     folder,
-    meta::{get_stats, head_stats, is_bulgur_cloud},
-    state::{AppState, PathTokenCache, TokenCache},
+    meta::{get_stats, head_stats, is_bulgur_cloud, Stats},
+    state::{AppState, PathTokenCache, Token, TokenCache},
     storage::{delete_storage, get_storage, head_storage, post_storage, put_storage},
 };
 use utoipa::OpenApi;
@@ -23,6 +23,19 @@ use tracing_actix_web::TracingLogger;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 use tracing_unwrap::OptionExt;
+
+#[derive(OpenApi)]
+#[openapi(
+    handlers(
+        bulgur_cloud::auth::login,
+        bulgur_cloud::meta::get_stats,
+        bulgur_cloud::meta::head_stats,
+        bulgur_cloud::meta::is_bulgur_cloud,
+        bulgur_cloud::storage::get_storage,
+    ),
+    components(Login, LoginResponse, Token, Password, Stats)
+)]
+pub struct ApiDoc;
 
 fn setup_logging() -> () {
     // Wow, thanks Luca Palmieri! https://www.lpalmieri.com/posts/2020-09-27-zero-to-production-4-are-we-observable-yet/
@@ -110,7 +123,7 @@ async fn main() -> anyhow::Result<()> {
                 // Login scope just handles logins. It is heavily throttled to resist brute force attacks.
                 let login_scope = web::scope("/auth")
                     .wrap(Governor::new(&login_governor))
-                    .service(login);
+                    .service(bulgur_cloud::auth::login);
                 // API scope handles all api functionality (anything except storage)
                 let api_scope = web::scope("/api")
                     .wrap(api_guard.clone())
