@@ -11,3 +11,6 @@ pub mod pages;
 pub mod state;
 pub mod static_files;
 pub mod storage;
+
+#[macro_use]
+extern crate lazy_static;

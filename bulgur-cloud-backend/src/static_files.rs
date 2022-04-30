@@ -1,7 +1,12 @@
 use std::path::PathBuf;
 
-use actix_web::{get, web, HttpResponse};
+use actix_web::{
+    get,
+    http::header::{self, HeaderValue},
+    web, HttpResponse,
+};
 use rust_embed::RustEmbed;
+use tracing_unwrap::ResultExt;
 
 fn extension_to_content_type(path: &str) -> Option<&'static str> {
     let path = PathBuf::from(path);
@@ -25,19 +30,58 @@ fn extension_to_content_type(path: &str) -> Option<&'static str> {
     None
 }
 
-async fn get_by_path<T: RustEmbed>(path: &str) -> HttpResponse {
-    let file = T::get(path);
-    match file {
-        Some(file) => {
-            let mut response = HttpResponse::Ok();
-            extension_to_content_type(path).map(|content_type| {
-                response.content_type(content_type);
-            });
-            // TODO: should cache the file vectors
-            response.body(file.data.to_vec())
+type EmbeddedFile = (Vec<u8>, Option<HeaderValue>);
+
+async fn get_by_path<T: RustEmbed>(path: &str, cache: EmbeddedFileCache) -> HttpResponse {
+    let cache_read = cache.read().await;
+    let embedded_file = match cache_read.get(path) {
+        Some(embedded_file) => Some(embedded_file.clone()),
+        None => {
+            // If the file is not in cache, we need to check if it's embedded in the binary then
+            let file = T::get(path);
+            match file {
+                Some(file) => {
+                    // We need a write lock to put the file in the cache.
+                    // Dropping the read lock and acquiring the write lock is
+                    // safe, because even if another thread wrote the same file
+                    // the results should be identical for this thread
+                    drop(cache_read);
+                    let header_value = extension_to_content_type(path).and_then(|content_type| {
+                        Some(HeaderValue::from_str(content_type).unwrap_or_log())
+                    });
+                    let embedded_file: EmbeddedFile = (file.data.to_vec(), header_value);
+                    let mut cache_write = cache.write().await;
+                    cache_write.insert(path.to_string(), embedded_file.clone());
+                    drop(cache_write);
+                    Some(embedded_file)
+                }
+                None => None,
+            }
         }
-        None => HttpResponse::NotFound().finish(),
-    }
+    };
+    embedded_file.map_or_else(
+        || HttpResponse::NotFound().finish(),
+        |(file, content_type)| {
+            let mut response = HttpResponse::Ok().body(file);
+            content_type.and_then(|content_type| {
+                response
+                    .headers_mut()
+                    .append(header::CONTENT_TYPE, content_type);
+                Some(())
+            });
+            response
+        },
+    )
+}
+
+type EmbeddedFileCache = tokio::sync::RwLock<std::collections::HashMap<String, EmbeddedFile>>;
+fn new_embedded_file_cache() -> EmbeddedFileCache {
+    tokio::sync::RwLock::new(std::collections::HashMap::new())
+}
+
+lazy_static! {
+    static ref UI_CACHE: EmbeddedFileCache = new_embedded_file_cache();
+    static ref BASIC_CACHE: EmbeddedFileCache = new_embedded_file_cache();
 }
 
 /// Serves the web UI.
