@@ -2,7 +2,8 @@ import api from "../api";
 import { isBoolean, isString } from "../typeUtils";
 import { BError } from "../error";
 import { BaseClientCommand } from "./base";
-import { joinURL, ResponseBase } from "../fetch";
+import { joinURL } from "../fetch";
+import { AxiosResponse } from "axios";
 
 function isFolderEntry(data: any): data is api.FolderEntry {
   return (
@@ -38,22 +39,20 @@ export class LoadFolder extends BaseClientCommand<FolderResults, [string]> {
     });
 
     console.log("loadFolder", response);
-    if (response?.response.status === 404) {
+    if (response.status === 404) {
       return {
         entries: [],
         notFound: true,
       };
     }
 
-    const out = await response?.json();
+    const out = await response.data;
     if (!isFolderResults(out)) {
-      const status = response?.response.status;
-      let reason: string = `${status}`;
-
       throw new BError({
         code: "load_folder_failed",
         title: "Failed to load folder",
-        description: `Unable to load ${path}: ${reason}`,
+        description: `Unable to load ${path}`,
+        detail: `${response.status} - ${response.statusText}`,
       });
     }
 
@@ -61,10 +60,10 @@ export class LoadFolder extends BaseClientCommand<FolderResults, [string]> {
   }
 
   protected async handleError(
-    response: ResponseBase,
+    response: AxiosResponse,
   ): Promise<"done" | "continue"> {
     console.log("handleError", response);
-    if (response?.response.status === 404) return "done";
+    if (response.status === 404) return "done";
     return "continue";
   }
 }

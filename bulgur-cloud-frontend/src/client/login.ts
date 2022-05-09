@@ -3,7 +3,7 @@ import { isString } from "../typeUtils";
 import { BError } from "../error";
 import { Persist } from "../persist";
 import { authSlice, store } from "../store";
-import { Fetch } from "../fetch";
+import axios from "axios";
 
 type LoginOpts = { username: string; password: string; site: string };
 
@@ -15,21 +15,25 @@ function isLoginResponse(data: any): data is api.LoginResponse {
 
 export class Login {
   async run(data: LoginOpts) {
-    const response = await Fetch.post({
-      url: `/auth/login`,
-      site: data.site,
-      data: {
+    const response = await axios.post(
+      `/auth/login`,
+      {
         username: data.username,
         password: data.password,
       },
-    });
+      {
+        baseURL: data.site,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        validateStatus: (status) => status < 500,
+      },
+    );
     const out = await response?.json();
     if (!isLoginResponse(out)) {
       const status = response?.response.status;
       let reason: string = `${status}`;
       if (status === undefined) reason = `There was an unknown error.`;
-      else if (500 <= status && status < 600)
-        reason = `There was an internal server error. (${status})`;
       else if (status === 400) {
         reason = "Incorrect username or password";
       } else {

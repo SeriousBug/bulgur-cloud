@@ -1,5 +1,12 @@
 import { Platform } from "react-native";
 
+export type BErrorConstructor = {
+  code: string;
+  title: string;
+  description: string;
+  detail?: string;
+};
+
 export class BError {
   private _code: string;
   public get code(): string {
@@ -13,8 +20,12 @@ export class BError {
   public get description(): string {
     return this._description;
   }
+  private _detail?: string;
+  public get detail(): string | undefined {
+    return this._detail;
+  }
 
-  constructor(opts: { code: string; title: string; description: string }) {
+  constructor(opts: BErrorConstructor) {
     this._code = opts.code;
     this._title = opts.title;
     this._description = opts.description;

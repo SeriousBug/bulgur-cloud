@@ -1,15 +1,27 @@
-import { BError } from "../error";
-import {
-  Fetch,
-  RequestWithData,
-  Request,
-  RequestBase,
-  ResponseBase,
-} from "../fetch";
+import axios, { AxiosResponse } from "axios";
+import { BError, BErrorConstructor } from "../error";
+import { RequestWithData, Request, RequestBase, ResponseBase } from "../fetch";
 import { store } from "../store";
 import { Login } from "./login";
 import { Logout } from "./logout";
 import { TokenCheck } from "./tokenCheck";
+
+class BServerError extends BError {
+  private response?: any;
+  private request?: any;
+
+  constructor(opts: BErrorConstructor & { response?: any }) {
+    super(opts);
+    this.response = opts.response;
+  }
+
+  public get detail(): string | undefined {
+    return JSON.stringify({
+      request: this.request,
+      response: this.response,
+    });
+  }
+}
 
 export abstract class BaseClientCommand<
   Output = void,
@@ -56,7 +68,7 @@ export abstract class BaseClientCommand<
    * default if this function is not overridden.
    */
   protected async handleError(
-    response: ResponseBase,
+    _response: AxiosResponse,
   ): Promise<"done" | "continue"> {
     return "continue";
   }
@@ -65,18 +77,36 @@ export abstract class BaseClientCommand<
   private static MAX_RETRY_TOKEN_REFRESHES = 1;
 
   private async request<Data = unknown | undefined>(opts: RequestBase<Data>) {
-    let out: ResponseBase;
+    let out: AxiosResponse;
     let retries = 0;
     do {
-      out = await Fetch.request({
-        authToken: this._token,
-        site: this._site,
-        ...opts,
-        url: encodeURI(opts.url),
-      });
-      if (out?.response.ok) return out;
+      const headers: { [key: string]: string | number } = {
+        "Content-Type": "application/json",
+      };
+      if (this._token) headers["authorization"] = this._token;
 
-      if (out?.response.status === 401) {
+      try {
+        out = await axios.request({
+          headers,
+          baseURL: this._site,
+          ...opts,
+          validateStatus: (status) => status < 500,
+          url: encodeURI(opts.url),
+        });
+      } catch (error) {
+        throw new BServerError({
+          code: "internal_server_error",
+          title: "Internal Server Error",
+          description:
+            "An internal server error occurred. Please retry later, or contact the server admin.",
+          // @ts-ignore
+          response: error?.response,
+        });
+      }
+
+      if (out.status < 200) return out;
+
+      if (out.status === 401) {
         const { username, password } = store.getState().auth;
         // If unauthorized, check if the token is valid first
         if (
@@ -109,7 +139,7 @@ export abstract class BaseClientCommand<
       }
     } while (retries <= BaseClientCommand.MAX_RETRY_TOKEN_REFRESHES);
 
-    const status = out?.response.status;
+    const status = out.status;
 
     if ((await this.handleError(out)) === "done") return out;
 
@@ -121,17 +151,11 @@ export abstract class BaseClientCommand<
           "There was an unknown error when connecting to the server.",
       });
 
-    if (500 <= status && status < 600)
-      throw new BError({
-        code: "server_error",
-        title: "Internal server error",
-        description: `There was an error in the server. (${status} - ${out?.response.statusText})`,
-      });
-
     throw new BError({
       code: "unexpected_error",
       title: "Unexpected error",
-      description: `An unexpected error occurred. (${status} - ${out?.response.statusText})`,
+      description: "An unexpected error occurred.",
+      detail: `${status} - ${out.statusText}`,
     });
   }
 

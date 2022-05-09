@@ -58,10 +58,17 @@ export type StorageState = {
       name: string;
     };
   };
+  uploadProgress: {
+    [fullpath: string]: {
+      size: number;
+      uploaded: number;
+    };
+  };
 };
 
 const initialStorageState: StorageState = {
   markedForMove: {},
+  uploadProgress: {},
 };
 
 export type LoadFolderPayload = api.FolderResults;
@@ -93,6 +100,36 @@ export const storageSlice = createSlice({
     },
     clearMarksForMove: (state) => {
       state.markedForMove = {};
+    },
+    setUploading: (
+      state,
+      action: {
+        payload: { store: string; path: string; name: string; size: number };
+      },
+    ) => {
+      const { store, path, name, size } = action.payload;
+      const fullPath = joinURL(store, path, name);
+      state.uploadProgress[fullPath] = {
+        size,
+        uploaded: 0,
+      };
+    },
+    progressUpload: (
+      state,
+      action: {
+        payload: {
+          store: string;
+          path: string;
+          name: string;
+          progress: number;
+        };
+      },
+    ) => {
+      const { store, path, name, progress } = action.payload;
+      const fullPath = joinURL(store, path, name);
+      const upload = state.uploadProgress[fullPath];
+      upload.uploaded += progress;
+      if (upload.uploaded >= upload.size) delete state.uploadProgress[fullPath];
     },
   },
 });
